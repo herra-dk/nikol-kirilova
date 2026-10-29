@@ -161,8 +161,18 @@ h2{font-family:var(--f-sig);font-weight:400;font-size:clamp(3.6rem,7vw,5.8rem);l
 @media (pointer:coarse){.cur{display:none}}
 @media (max-width:520px){.mark{font-size:1.6rem}.nav{gap:6px 12px;flex-wrap:nowrap}.nav a{font-size:.82rem;white-space:nowrap}}
 
+#bgm{display:none}
+@keyframes drift{from{transform:translate3d(-6%,-4%,0) rotate(-4deg)}to{transform:translate3d(6%,5%,0) rotate(5deg)}}
+@keyframes fill{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 /* phones: no live backdrop blur over the moving canvas, it is the most expensive thing on mobile GPUs */
 @media (max-width:820px),(pointer:coarse){
+  /* phones: the pigment field is pre-painted gradients drifting on the compositor, no per-frame drawing */
+  #bg{display:none}
+  #bgm{display:block;position:fixed;inset:0;z-index:0;overflow:hidden;background:var(--ink);pointer-events:none}
+  #bgm i{position:absolute;inset:-15%;will-change:transform;animation:drift 38s ease-in-out infinite alternate}
+  #bgm .c{background:radial-gradient(45% 35% at 72% 22%,rgba(224,69,123,.75),transparent 70%),radial-gradient(40% 35% at 22% 78%,rgba(255,138,61,.55),transparent 70%),radial-gradient(40% 30% at 30% 30%,rgba(26,107,140,.45),transparent 70%),linear-gradient(160deg,#4c1c94,#120a2b 75%)}
+  #bgm .k{opacity:0;transition:opacity 1.8s ease;animation-duration:46s;animation-direction:alternate-reverse;background:radial-gradient(40% 30% at 70% 25%,rgba(237,235,230,.32),transparent 70%),radial-gradient(45% 35% at 25% 75%,rgba(115,115,115,.45),transparent 70%),linear-gradient(170deg,#2b2b2b,#050505 75%)}
+  .dot[aria-current="true"] i{transform:scaleX(0);animation:fill 6s linear forwards}
   .frame{transform-style:flat;transition:none;box-shadow:0 24px 50px -24px rgba(0,0,0,.8)}
   .frame::after,.frame-shadow{display:none}
   .himg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transform:scale(1.06);transition:opacity 1.2s ease,transform 7s linear}
@@ -180,6 +190,7 @@ h2{font-family:var(--f-sig);font-weight:400;font-size:clamp(3.6rem,7vw,5.8rem);l
 }
 
 @media (prefers-reduced-motion:reduce){
+  #bgm i,.dot[aria-current="true"] i{animation:none}
   .sig{animation:none;-webkit-mask-image:none;mask-image:none}
   .swash path{animation:none;stroke-dashoffset:0}
   .enter{animation:none;opacity:1}
@@ -191,6 +202,7 @@ h2{font-family:var(--f-sig);font-weight:400;font-size:clamp(3.6rem,7vw,5.8rem);l
 
 
 <canvas id="bg" aria-hidden="true"></canvas>
+<div id="bgm" aria-hidden="true"><i class="c"></i><i class="k"></i></div>
 
 <header class="top">
   <div class="inner">
@@ -312,6 +324,11 @@ addEventListener('pointermove', e => { pointer.x = e.clientX; pointer.y = e.clie
 /* ---------- pigment field: pal 0 = full colour, 1 = black and white ink ---------- */
 const bg = { tick: null, pal: 0, drift: 0 };
 function initBg(){
+  if (mobile){   // phones: fade the black and white layer in instead of redrawing a shader every frame
+    const k = $('#bgm .k'); let shown = -1;
+    bg.tick = () => { if (bg.pal !== shown){ shown = bg.pal; k.style.opacity = shown; } };
+    return;
+  }
   const canvas = $('#bg'); let renderer;
   try { renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'low-power' }); } catch (e) { return; }
   let scale = mobile ? .3 : .5; renderer.setPixelRatio(scale);
@@ -383,9 +400,11 @@ function initHero(){
     $('#hero-gl').remove();
     const imgs = list.map((w, i) => { const im = document.createElement('img'); im.src = w.src; im.alt = ''; im.className = 'himg' + (i ? '' : ' on'); im.style.objectPosition = `50% ${(1 - (w.fy ?? .5)) * 100}%`; frame.append(im); return im; });
     if (!reduced) frame.classList.add('reveal');
-    t0 = performance.now() + 2500;
-    go = to => { if (to === cur) return; imgs[cur].classList.remove('on'); dotEls[cur].style.setProperty('--k', 0); cur = to; imgs[cur].classList.add('on'); mark(); t0 = performance.now(); };
-    hero.tick = now => { const k = clamp((now - t0) / HOLD, 0, 1); dotEls[cur].style.setProperty('--k', k); if (k >= 1 && !reduced) go((cur + 1) % list.length); };
+    // timers and CSS animations only, so nothing on the home page runs per frame
+    let timer = 0;
+    const later = ms => { clearTimeout(timer); if (!reduced) timer = setTimeout(() => hero.on && !document.hidden ? go((cur + 1) % list.length) : later(HOLD), ms); };
+    dotEls[0].style.animationDelay = '2.5s'; later(HOLD + 2500);
+    go = to => { if (to === cur) return; imgs[cur].classList.remove('on'); dotEls[0].style.animationDelay = ''; cur = to; imgs[cur].classList.add('on'); mark(); later(HOLD); };
     return;
   }
 
@@ -454,7 +473,7 @@ const ring = { on: false, step: () => {}, sync: () => {}, show: () => {} };
 function initRing(){
   const list = WORKS, N = list.length, stage = $('#stage'), canvas = $('#ring-gl');
   let renderer;
-  try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true }); } catch (e) { return; }
+  try { renderer = new THREE.WebGLRenderer({ canvas, antialias: !mobile, alpha: true }); } catch (e) { return; }
   renderer.setPixelRatio(DPR); renderer.setClearColor(0x000000, 0);
   const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(36, 1, .1, 50);
   const group = new THREE.Group(); group.position.y = .1; scene.add(group);

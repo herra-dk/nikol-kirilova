@@ -159,6 +159,16 @@ h2{font-family:var(--f-sig);font-weight:400;font-size:clamp(3.6rem,7vw,5.8rem);l
 @media (pointer:coarse){.cur{display:none}}
 @media (max-width:520px){.mark{font-size:1.9rem}.nav{gap:6px 16px}.nav a{font-size:.85rem}}
 
+/* phones: no live blur over the moving canvas, it is what makes transitions stutter */
+@media (pointer:coarse),(max-width:760px){
+  .sig{text-shadow:none}
+  .btn,.ib{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(10,8,20,.62)}
+  .form{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(10,8,20,.72)}
+  .lb-bg{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(6,5,12,.95)}
+  .frame-shadow{filter:none;background:radial-gradient(closest-side,rgba(6,4,14,.55),transparent)}
+  .frame::after{display:none}
+}
+
 @media (prefers-reduced-motion:reduce){
   .sig{animation:none;-webkit-mask-image:none;mask-image:none}
   .swash path{animation:none;stroke-dashoffset:0}
@@ -258,6 +268,8 @@ h2{font-family:var(--f-sig);font-weight:400;font-size:clamp(3.6rem,7vw,5.8rem);l
 const $ = s => document.querySelector(s);
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const fine = matchMedia('(pointer: fine)').matches;
+const lite = matchMedia('(pointer: coarse), (max-width: 760px)').matches;   // phones: lighter shaders, no blur, capped resolution
+const DPR = Math.min(devicePixelRatio, lite ? 1.5 : 2);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 const EASE = 'cubic-bezier(.2,.8,.2,1)';
@@ -283,7 +295,7 @@ const NOISE = `
 float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
 float noise(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.-2.*f);
   return mix(mix(hash(i),hash(i+vec2(1.,0.)),u.x), mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),u.x),u.y); }
-float fbm(vec2 p){ float v=0., a=.5; for(int i=0;i<5;i++){ v+=a*noise(p); p*=2.03; a*=.5; } return v; }`;
+float fbm(vec2 p){ float v=0., a=.5; for(int i=0;i<${lite ? 3 : 5};i++){ v+=a*noise(p); p*=2.03; a*=.5; } return v; }`;
 const pointer = { x: innerWidth / 2, y: innerHeight / 2 };
 addEventListener('pointermove', e => { pointer.x = e.clientX; pointer.y = e.clientY; }, { passive: true });
 
@@ -292,7 +304,7 @@ const bg = { tick: null, pal: 0, drift: 0 };
 function initBg(){
   const canvas = $('#bg'); let renderer;
   try { renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'low-power' }); } catch (e) { return; }
-  renderer.setPixelRatio(.5);
+  renderer.setPixelRatio(lite ? .35 : .5);
   const scene = new THREE.Scene(), cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const u = { uTime: { value: 0 }, uPal: { value: bg.pal }, uDrift: { value: bg.drift }, uMouse: { value: new THREE.Vector2(.5, .5) }, uRes: { value: new THREE.Vector2(1, 1) } };
   scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({ uniforms: u,
@@ -322,8 +334,10 @@ function initBg(){
       }` })));
   const resize = () => { renderer.setSize(innerWidth, innerHeight, false); u.uRes.value.set(innerWidth, innerHeight); };
   addEventListener('resize', resize); resize();
-  const target = new THREE.Vector2(.5, .5);
+  const target = new THREE.Vector2(.5, .5); let odd = false;
   bg.tick = now => {
+    if (lite && (odd = !odd)) return;   // the field drifts slowly, 30fps is enough on phones
+    if (lite && !lb.hidden) return;     // fully covered by the lightbox
     u.uTime.value = reduced ? 10 : now / 1000;
     u.uPal.value = lerp(u.uPal.value, bg.pal, reduced ? 1 : .03);
     u.uDrift.value = lerp(u.uDrift.value, bg.drift, reduced ? 1 : .03);
@@ -352,7 +366,8 @@ function initHero(){
 
   let renderer;
   try { renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true }); } catch (e) { return heroFallback(list); }
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setClearColor(0x000000, 0);
+  renderer.setPixelRatio(DPR); renderer.setClearColor(0x000000, 0);
+  list.forEach(w => renderer.initTexture(tex(w)));   // upload every image now, so a crossfade never waits on the GPU
   const scene = new THREE.Scene(), cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const u = {
     uA: { value: tex(list[0]) }, uB: { value: tex(list[1]) }, uAspA: { value: list[0].pw / list[0].ph }, uAspB: { value: list[1].pw / list[1].ph }, uFyA: { value: list[0].fy ?? .5 }, uFyB: { value: list[1].fy ?? .5 },
@@ -392,6 +407,7 @@ function initHero(){
 
   let revealStart = null, prev = performance.now();
   hero.tick = now => {
+    if (lite && !lb.hidden) return;
     const dt = Math.min(50, now - prev); prev = now;
     if (revealStart === null) revealStart = now + 900;
     if (!reduced){ const k = clamp((now - revealStart) / 2600, 0, 1); u.uReveal.value = k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2; }
@@ -415,8 +431,9 @@ const ring = { on: false, step: () => {}, sync: () => {}, show: () => {} };
 function initRing(){
   const list = WORKS, N = list.length, stage = $('#stage'), canvas = $('#ring-gl');
   let renderer;
-  try { renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true }); } catch (e) { return; }
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setClearColor(0x000000, 0);
+  try { renderer = new THREE.WebGLRenderer({ canvas, antialias: !lite, alpha: true }); } catch (e) { return; }
+  renderer.setPixelRatio(DPR); renderer.setClearColor(0x000000, 0);
+  list.forEach(w => renderer.initTexture(tex(w)));
   const scene = new THREE.Scene(), cam = new THREE.PerspectiveCamera(36, 1, .1, 50);
   const group = new THREE.Group(); group.position.y = .1; scene.add(group);
 
@@ -607,10 +624,10 @@ function show(id, instant){
   next.hidden = false; next.scrollTop = 0;
   if (prev){
     if (reduced || instant) prev.hidden = true;
-    else { prev.style.pointerEvents = 'none'; const a = prev.animate([{ opacity: 1, filter: 'blur(0px)', transform: 'none' }, { opacity: 0, filter: 'blur(10px)', transform: 'scale(.98)' }], { duration: 420, easing: 'ease-in', fill: 'forwards' });
+    else { prev.style.pointerEvents = 'none'; const a = prev.animate(lite ? [{ opacity: 1 }, { opacity: 0 }] : [{ opacity: 1, filter: 'blur(0px)', transform: 'none' }, { opacity: 0, filter: 'blur(10px)', transform: 'scale(.98)' }], { duration: lite ? 260 : 420, easing: 'ease-in', fill: 'forwards' });
       a.finished.then(() => { if (page !== prev.id) prev.hidden = true; a.cancel(); prev.style.pointerEvents = ''; }); }
   }
-  if (!reduced && !instant) next.animate([{ opacity: 0, filter: 'blur(10px)', transform: 'translateY(26px)' }, { opacity: 1, filter: 'blur(0px)', transform: 'none' }], { duration: 850, delay: 220, easing: EASE, fill: 'backwards' });
+  if (!reduced && !instant) next.animate(lite ? [{ opacity: 0, transform: 'translateY(18px)' }, { opacity: 1, transform: 'none' }] : [{ opacity: 0, filter: 'blur(10px)', transform: 'translateY(26px)' }, { opacity: 1, filter: 'blur(0px)', transform: 'none' }], { duration: lite ? 560 : 850, delay: lite ? 140 : 220, easing: EASE, fill: 'backwards' });
 }
 document.addEventListener('click', e => {
   const a = e.target.closest('a[href^="#"]'); if (!a) return;

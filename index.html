@@ -178,6 +178,26 @@ h2{font-family:var(--f-sig);font-weight:400;font-size:clamp(3.6rem,7vw,5.8rem);l
 .cur.on{opacity:1}
 .cur.big{width:64px;height:64px;margin:-32px 0 0 -32px;background:rgba(246,241,234,.12)}
 @media (pointer:coarse){.cur{display:none}}
+/* brush cursor: the tip is the hotspot, the trail is wet paint that dries away */
+html.brush,html.brush *{cursor:none!important}
+html.brush input,html.brush textarea{cursor:text!important}
+.cur.brushy{width:auto;height:auto;margin:0;border:0;border-radius:0;mix-blend-mode:normal;background:none!important}
+.cur.brushy .tilt{display:block;width:36px;height:36px;margin:-35px 0 0 -1px;transform-origin:1px 35px}
+.cur.brushy svg{display:block;width:100%;height:100%;transform-origin:2.5% 97.5%;transition:transform .45s var(--ease);filter:drop-shadow(1px 2px 2px rgba(0,0,0,.35))}
+.cur.brushy.big svg{transform:scale(1.12)}
+.cur.brushy.down svg{transform:scale(.9) translate(1px,-1px)}
+/* a room mid-turn reads as a sheet of paper: faint body, shadow gathering toward the spine */
+.page.leaf{--shade:0;backface-visibility:hidden;background:linear-gradient(90deg,rgba(0,0,0,calc(var(--shade) * .9)),rgba(246,241,234,.05) 60%,rgba(255,255,255,.09));box-shadow:0 0 60px rgba(0,0,0,calc(var(--shade) * .6))}
+#paint,#tint{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:59}
+#tint{mix-blend-mode:multiply;filter:blur(10px);opacity:.22}   /* a watercolour glaze over the work under the brush: tints the paper, keeps the drawing */
+.cur.brushy.dip svg{transform:rotate(-24deg) translate(1px,3px)}
+.sig.jsw{animation:none}
+.swash path.jsw{animation:none}
+.writer{position:absolute;left:0;top:0;width:76px;height:76px;margin:-74px 0 0 -2px;pointer-events:none;z-index:2;opacity:0;will-change:transform;filter:drop-shadow(2px 4px 4px rgba(0,0,0,.35))}
+.writer svg{display:block;width:100%;height:100%}
+.snd{width:34px;height:34px;margin-left:clamp(10px,2vw,22px);border-radius:50%;border:1px solid var(--line);background:var(--glass);color:var(--paper);display:grid;place-items:center;cursor:pointer;padding:0;flex-shrink:0;transition:background .3s,opacity .3s;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.snd svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round}
+.snd .w{transition:opacity .3s}.snd[aria-pressed="false"]{opacity:.55}.snd[aria-pressed="false"] .w{opacity:0}
 @media (max-width:520px){.mark{font-size:1.6rem}.nav{gap:6px 12px;flex-wrap:nowrap}.nav a{font-size:.82rem;white-space:nowrap}}
 
 #bgm{display:none}
@@ -231,6 +251,7 @@ h2{font-family:var(--f-sig);font-weight:400;font-size:clamp(3.6rem,7vw,5.8rem);l
       <a href="#za-men" data-p="za-men">За мен</a>
       <a href="#kontakt" data-p="kontakt">Контакт</a>
     </nav>
+    <button type="button" class="snd" id="snd" aria-pressed="true" aria-label="Звук"><svg viewBox="0 0 24 24"><path d="M4 9.5h3l4.5-4v13l-4.5-4H4z"/><path class="w" d="M15.5 9a4 4 0 0 1 0 6M18.2 6.5a7.5 7.5 0 0 1 0 11"/></svg></button>
   </div>
 </header>
 
@@ -308,6 +329,8 @@ h2{font-family:var(--f-sig);font-weight:400;font-size:clamp(3.6rem,7vw,5.8rem);l
   <span class="lb-count" id="lb-count"></span>
 </div>
 
+<canvas id="tint" aria-hidden="true"></canvas>
+<canvas id="paint" aria-hidden="true"></canvas>
 <div class="cur" id="cur" aria-hidden="true"></div>
 
 <script src="vendor/three.min.js"></script>
@@ -414,7 +437,7 @@ const hero = { on: false };
 function initHero(){
   const list = WORKS.filter(w => w.hero), canvas = $('#hero-gl'), frame = $('#frame'), page = $('#nachalo'), dots = $('#dots');
   let cur = 0, next = 1, phase = 'hold', t0 = 0, go = () => {}; const HOLD = 6000, MIX = 1600;
-  list.forEach((w, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'dot'; b.setAttribute('aria-label', `Творба ${i + 1} от ${list.length}`); b.innerHTML = '<i></i>'; b.onclick = () => go(i); dots.append(b); });
+  list.forEach((w, i) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'dot'; b.setAttribute('aria-label', `Творба ${i + 1} от ${list.length}`); b.innerHTML = '<i></i>'; b.onclick = () => { if (i !== cur) sfx.flip(i > cur ? 1 : -1, i); go(i); }; dots.append(b); });
   const dotEls = [...dots.children], mark = (to = cur) => dotEls.forEach((d, i) => d.setAttribute('aria-current', i === to));
   mark();
   frame.onclick = () => openLB(list, cur, frame.getBoundingClientRect());
@@ -544,7 +567,7 @@ function initRing(){
     if (d && G && !reduced) G.from(count.firstChild, { yPercent: 80 * Math.sign(d), opacity: 0, duration: .5, ease: 'power3.out' }); bar.style.transform = `scaleX(${(i + 1) / N})`;
     if (ring.on){ bg.pal = .25 + .75 * i / (N - 1); bg.drift = 1.6 + pos * .35; }   // deeper into the works, closer to black and white
   };
-  const step = d => { pos += d; sync(d); };
+  const step = d => { pos += d; sync(d); sfx.flip(Math.sign(d), mod(pos)); };
   ring.kick = () => { if (!reduced) rot += 1.1; };   // the wall swings into place when you arrive
   const nearest = i => ((i - mod(pos) + N + Math.floor(N / 2)) % N) - Math.floor(N / 2);
   ring.step = step; ring.sync = sync; ring.show = i => { pos += nearest(i); sync(); };
@@ -569,7 +592,7 @@ function initRing(){
   });
   const end = e => {
     if (!dragging) return; dragging = false; stage.classList.remove('drag');
-    if (moved){ const n = Math.round(drag); pos += n !== 0 ? n : Math.abs(drag) > .18 ? Math.sign(drag) : 0; drag = 0; sync(); return; }
+    if (moved){ const n = Math.round(drag), was = pos; pos += n !== 0 ? n : Math.abs(drag) > .18 ? Math.sign(drag) : 0; drag = 0; sync(); if (pos !== was) sfx.flip(Math.sign(pos - was), mod(pos)); return; }
     drag = 0; if (e.type !== 'pointerup') return;
     toNdc(e); ray.setFromCamera(ndc, cam); const h = ray.intersectObjects(meshes, false)[0];
     if (h){ const i = h.object.userData.i; if (i === mod(pos)) openLB(list, i, screenRect(h.object)); else ring.show(i); }
@@ -645,7 +668,7 @@ async function closeLB(){
   lb.hidden = true; lbReturn?.focus?.({ preventScroll: true }); lbBusy = false;
 }
 function stepLB(d){
-  if (lbList.length < 2) return; lbI = (lbI + d + lbList.length) % lbList.length; const w = lbList[lbI];
+  if (lbList.length < 2) return; lbI = (lbI + d + lbList.length) % lbList.length; const w = lbList[lbI]; sfx.flip(d, WORKS.indexOf(w));
   if (reduced) return fillLB(w);
   lbImg.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: `translateX(${-d * 40}px) rotate(${-d}deg)` }], { duration: 220, easing: 'ease-in' }).finished.then(() => {
     fillLB(w); lbImg.animate([{ opacity: 0, transform: `translateX(${d * 40}px) rotate(${d}deg)` }, { opacity: 1, transform: 'none' }], { duration: 460, easing: EASE });
@@ -672,16 +695,171 @@ addEventListener('keydown', e => {
   }
 });
 
-/* ---------- cursor ---------- */
+/* ---------- cursor: a real brush, dipped in the background's colours ---------- */
 const cursor = { big(){} };
+// paint drifts through the hero palette as you move; deeper pages drain it to graphite, like the background
+const INKS = [[224, 69, 123], [255, 138, 61], [242, 193, 78], [255, 179, 186], [157, 107, 255], [96, 165, 250]];
+function inkAt(u){
+  const n = INKS.length, f = ((u % n) + n) % n, i = Math.floor(f), k = f - i, a = INKS[i], c = INKS[(i + 1) % n], e = k * k * (3 - 2 * k);
+  const col = a.map((v, j) => v + (c[j] - v) * e), lum = col[0] * .3 + col[1] * .59 + col[2] * .11, g = clamp((bg.pal - .2) / .6, 0, 1);
+  return col.map(v => Math.round(v + (lum * .95 - v) * g));
+}
+// short round brush in the site's own paper tone: ivory handle, champagne ferrule, bristles soaked in --tip
+const brushSvg = id => `<svg viewBox="0 0 40 40"><defs>
+    <linearGradient id="${id}h" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fffdf9"/><stop offset=".55" stop-color="#f6f1ea"/><stop offset="1" stop-color="#cfc5b6"/></linearGradient>
+    <linearGradient id="${id}f" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f3e9d6"/><stop offset=".5" stop-color="#cdbb98"/><stop offset="1" stop-color="#9c8a6b"/></linearGradient>
+    <linearGradient id="${id}t" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#efe4d2"/><stop offset=".3" style="stop-color:var(--tip,#e0457b)"/><stop offset="1" style="stop-color:var(--tip,#e0457b)"/></linearGradient>
+  </defs>
+  <path d="M15.4 21.8 26.6 10.6a2.1 2.1 0 0 1 2.8 2.8L18.2 24.6z" fill="url(#${id}h)"/>
+  <path d="M11.8 25.4l3.6-3.6 2.8 2.8-3.6 3.6z" fill="url(#${id}f)"/>
+  <path d="M11.8 25.4l2.8 2.8C11.6 31.8 6.5 36.3 1 39c2.7-5.5 7.2-10.6 10.8-13.6z" fill="url(#${id}t)"/>
+  <path d="M10.6 27.6C8 30.3 4.6 34.6 2.4 37.6" stroke="#fff" stroke-opacity=".35" stroke-width=".55" stroke-linecap="round" fill="none"/>
+  </svg>`;
+const rgb = c => `rgb(${c[0]},${c[1]},${c[2]})`;
 function initCursor(){
   if (!fine || reduced) return;
-  const el = $('#cur'); let x = pointer.x, y = pointer.y, over = false, ringOver = false;
+  const el = $('#cur'), cv = $('#paint'), cx = cv.getContext('2d'), gv = $('#tint'), gx = gv.getContext('2d');
+  el.classList.add('brushy'); document.documentElement.classList.add('brush');
+  el.innerHTML = `<span class="tilt">${brushSvg('cb')}</span>`;
+  const tilt = el.firstChild;
+  let x = pointer.x, y = pointer.y, over = false, ringOver = false, dpr = 1, lean = 0, hueT = Math.random() * INKS.length, hue = hueT;
+  const size = () => { dpr = Math.min(devicePixelRatio || 1, 2); for (const c of [cv, gv]){ c.width = innerWidth * dpr; c.height = innerHeight * dpr; } };
+  size(); addEventListener('resize', size);
   addEventListener('pointermove', () => el.classList.add('on'), { once: true });
-  document.addEventListener('pointerover', e => { over = !!e.target.closest('[data-art]'); el.classList.toggle('big', over || ringOver); });
-  cursor.big = on => { ringOver = on; el.classList.toggle('big', over || ringOver); };
-  const tick = () => { x = lerp(x, pointer.x, .2); y = lerp(y, pointer.y, .2); el.style.transform = `translate(${x}px,${y}px)`; requestAnimationFrame(tick); };
+  const onArt = () => over || ringOver;
+  document.addEventListener('pointerover', e => {
+    over = !!e.target.closest('[data-art], #lb-img'); el.classList.toggle('big', onArt());
+    // over a link or button the brush dips into the next colour
+    const dip = !over && !!e.target.closest('a, button');
+    if (dip && !el.classList.contains('dip')) hueT = Math.floor(hueT) + 1;
+    el.classList.toggle('dip', dip);
+  });
+  cursor.big = on => { ringOver = on; el.classList.toggle('big', onArt()); };
+  addEventListener('pointerdown', e => { el.classList.add('down'); if (e.pointerType === 'mouse' && !onArt()) dab(e.clientX, e.clientY); });
+  addEventListener('pointerup', () => el.classList.remove('down'));
+
+  // each point keeps its colour and when it was laid down; slow strokes press the brush, fast ones lift it.
+  // over a work the brush tints the work itself instead (a 'color' blend layer), and heavy strokes drip
+  const LIFE = 240, TLIFE = 600, DLIFE = 1500, pts = [], tpts = [], dabs = [], drips = [];
+  let lx = pointer.x, ly = pointer.y, lw = 3, vx = 0;
+  addEventListener('pointermove', e => {
+    if (e.pointerType !== 'mouse') return;
+    const dx = e.clientX - lx, dy = e.clientY - ly, d = Math.hypot(dx, dy); if (d < 2) return;
+    hueT += d / 420; vx = lerp(vx, dx, .3);
+    lw = lerp(lw, clamp(4.5 - d * .06, 1.2, 4.5), .3);
+    const t = performance.now(), c = inkAt(hue), pt = { x: e.clientX, y: e.clientY, w: lw, t, nx: -dy / d, ny: dx / d, c };
+    if (onArt()){ tpts.push(pt); if (tpts.length > 50) tpts.shift(); pts.length = 0; }
+    else {
+      pts.push(pt); if (pts.length > 14) pts.shift();
+      if (lw > 3 && drips.length < 6 && Math.random() < .07) drips.push({ x: e.clientX + (Math.random() - .5) * 2, y: e.clientY, w: lw * (.35 + Math.random() * .2), len: 10 + Math.random() * 22, t, c });
+    }
+    lx = e.clientX; ly = e.clientY;
+  }, { passive: true });
+  function dab(px, py){ const t = performance.now(), c = inkAt(hue); for (let k = 0; k < 4; k++){ const a = Math.random() * 6.283, r = k ? 2 + Math.random() * 4 : 0; dabs.push({ x: px + Math.cos(a) * r, y: py + Math.sin(a) * r, r: k ? .5 + Math.random() * .9 : 2.4, t, c }); }
+    drips.push({ x: px, y: py + 1, w: 1.3, len: 16 + Math.random() * 16, t, c }); }
+  const BRISTLES = [[0, 1, .85], [-.55, .4, .45], [.55, .4, .45]];   // offset, width, alpha
+  const ease = k => 1 - Math.pow(1 - k, 3);
+  let drawn = false, tdrawn = false;
+  const tick = () => {
+    x = lerp(x, pointer.x, .45); y = lerp(y, pointer.y, .45); el.style.transform = `translate(${x}px,${y}px)`;
+    lean = lerp(lean, clamp(vx * 1.1, -18, 18), .12); vx *= .9;   // the brush leans into the stroke and settles back
+    tilt.style.transform = `rotate(${lean.toFixed(2)}deg)`;
+    hue = lerp(hue, hueT, .08); el.style.setProperty('--tip', rgb(inkAt(hue)));
+    const now = performance.now();
+    while (pts.length && now - pts[0].t > LIFE) pts.shift();
+    while (tpts.length && now - tpts[0].t > TLIFE) tpts.shift();
+    while (dabs.length && now - dabs[0].t > LIFE * 2) dabs.shift();
+    for (let i = drips.length - 1; i >= 0; i--) if (now - drips[i].t > DLIFE) drips.splice(i, 1);
+    if (pts.length > 1 || dabs.length || drips.length || drawn){
+      cx.setTransform(dpr, 0, 0, dpr, 0, 0); cx.clearRect(0, 0, innerWidth, innerHeight); cx.lineCap = 'round';
+      for (const [o, wk, ak] of BRISTLES){
+        for (let i = 1; i < pts.length; i++){
+          const a = pts[i - 1], p = pts[i], age = (now - p.t) / LIFE, k = Math.pow(1 - age, 1.4);
+          cx.strokeStyle = `rgba(${p.c[0]},${p.c[1]},${p.c[2]},${(.75 * ak * k).toFixed(3)})`; cx.lineWidth = p.w * wk * (.5 + .5 * k);
+          const oa = o * a.w * .55, ob = o * p.w * .55;
+          cx.beginPath(); cx.moveTo(a.x + a.nx * oa, a.y + a.ny * oa); cx.lineTo(p.x + p.nx * ob, p.y + p.ny * ob); cx.stroke();
+        }
+      }
+      for (const d of dabs){ const k = 1 - (now - d.t) / (LIFE * 2); cx.fillStyle = `rgba(${d.c[0]},${d.c[1]},${d.c[2]},${(.7 * k).toFixed(3)})`; cx.beginPath(); cx.arc(d.x, d.y, d.r * (1 + (1 - k) * .5), 0, 6.283); cx.fill(); }
+      // a drip runs down, slows, and dries from the top while its bead lingers
+      for (const d of drips){
+        const age = (now - d.t) / DLIFE, run = ease(clamp(age / .55, 0, 1)) * d.len, k = Math.pow(1 - age, 1.2), by = d.y + run;
+        const gr = cx.createLinearGradient(0, d.y, 0, by); gr.addColorStop(0, `rgba(${d.c[0]},${d.c[1]},${d.c[2]},0)`); gr.addColorStop(1, `rgba(${d.c[0]},${d.c[1]},${d.c[2]},${(.8 * k).toFixed(3)})`);
+        cx.strokeStyle = gr; cx.lineWidth = d.w; cx.beginPath(); cx.moveTo(d.x, d.y); cx.lineTo(d.x, by); cx.stroke();
+        cx.fillStyle = `rgba(${d.c[0]},${d.c[1]},${d.c[2]},${(.85 * k).toFixed(3)})`; cx.beginPath(); cx.ellipse(d.x, by, d.w * 1.1, d.w * 1.35, 0, 0, 6.283); cx.fill();
+      }
+      drawn = pts.length > 1 || dabs.length > 0 || drips.length > 0;
+    }
+    if (tpts.length > 1 || tdrawn){
+      gx.setTransform(dpr, 0, 0, dpr, 0, 0); gx.clearRect(0, 0, innerWidth, innerHeight); gx.lineCap = gx.lineJoin = 'round';
+      for (let i = 1; i < tpts.length; i++){
+        const a = tpts[i - 1], p = tpts[i], k = Math.pow(1 - (now - p.t) / TLIFE, 1.3);
+        if (Math.hypot(p.x - a.x, p.y - a.y) > 120) continue;   // a jump between works, not a stroke
+        gx.strokeStyle = `rgba(${p.c[0]},${p.c[1]},${p.c[2]},${(.9 * k).toFixed(3)})`; gx.lineWidth = 18 + p.w * 3;
+        gx.beginPath(); gx.moveTo(a.x, a.y); gx.lineTo(p.x, p.y); gx.stroke();
+      }
+      tdrawn = tpts.length > 1;
+    }
+    requestAnimationFrame(tick);
+  };
   tick();
+}
+
+/* ---------- the signature is written by a brush on arrival (desktop) ---------- */
+function initSigBrush(){
+  const sig = $('.sig'), path = $('.swash path');
+  if (!G || !fine || reduced || mobile || !sig || !path) return;
+  const wrap = $('.sig-wrap'), pen = document.createElement('span'), l1 = sig.firstElementChild, l2 = sig.querySelector('.l2');
+  pen.className = 'writer'; pen.setAttribute('aria-hidden', 'true'); pen.innerHTML = brushSvg('wb'); wrap.append(pen);
+  sig.classList.add('jsw'); path.classList.add('jsw');
+  const st = { p: 1, s: 1 }, len = path.getTotalLength(); let hue = Math.random() * INKS.length;
+  const place = (px, py) => { pen.style.transform = `translate(${px}px,${py}px)`; pen.style.setProperty('--tip', rgb(inkAt(hue))); };
+  const box = el => { const r = el.getBoundingClientRect(), w = wrap.getBoundingClientRect(); return { l: r.left - w.left, r: r.right - w.left, m: r.top - w.top + r.height * .58, h: r.height }; };
+  const tl = G.timeline({ delay: .5, onComplete: () => { sig.style.webkitMaskImage = sig.style.maskImage = 'none'; pen.remove(); } });
+  tl.to(st, { p: 0, duration: 2.6, ease: 'power2.inOut', onUpdate(){
+      const mp = `${(st.p * 100).toFixed(2)}% 0`; sig.style.webkitMaskPosition = sig.style.maskPosition = mp;
+      // the reveal edge sits at 1.2W - 1.4W*p; the brush rides it, hopping between the two written lines
+      const s = sig.getBoundingClientRect(), w = wrap.getBoundingClientRect(), ex = s.left - w.left + s.width * (1.2 - 1.4 * st.p);
+      const a = box(l1), b = box(l2), inA = ex > a.l && ex < a.r, inB = ex > b.l && ex < b.r;
+      const base = inA && inB ? (Math.sin(ex * .035) > 0 ? a.m : b.m) : inA ? a.m : b.m, h = inA ? a.h : b.h;
+      hue += .012; place(ex, base + Math.sin(ex * .09) * h * .18);
+    } }, 0)
+    .fromTo(pen, { opacity: 0 }, { opacity: 1, duration: .35 }, 0)
+    .to(st, { s: 0, duration: 1.4, ease: 'power3.out', onUpdate(){
+      path.style.strokeDashoffset = st.s;
+      const svg = path.ownerSVGElement, m = svg.getScreenCTM(), w = wrap.getBoundingClientRect(), q = path.getPointAtLength((1 - st.s) * len);
+      hue += .01; place(m.a * q.x + m.e - w.left, m.d * q.y + m.f - w.top);
+    } }, 2.65)
+    .to(pen, { opacity: 0, x: '+=30', y: '-=30', duration: .5, ease: 'power2.in' }, 3.9);
+}
+
+/* ---------- sound: a soft paper swish when you turn a work; silent until the first click or key ---------- */
+const sfx = { flip(){}, page(){} };
+function initSound(){
+  const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+  const btn = $('#snd'); let on = true, ac = null, out, noise;
+  try { on = localStorage.getItem('nk-sound') !== 'off'; } catch (e) {}
+  btn.setAttribute('aria-pressed', on);
+  btn.onclick = () => { on = !on; btn.setAttribute('aria-pressed', on); try { localStorage.setItem('nk-sound', on ? 'on' : 'off'); } catch (e) {} if (on) sfx.flip(1); };
+  const boot = () => {
+    if (ac){ if (ac.state === 'suspended') ac.resume(); return; }
+    ac = new AC(); out = ac.createGain(); out.gain.value = .9; out.connect(ac.destination);
+    noise = ac.createBuffer(1, ac.sampleRate, ac.sampleRate); const ch = noise.getChannelData(0); let b = 0;
+    for (let i = 0; i < ch.length; i++){ b = .97 * b + .03 * (Math.random() * 2 - 1); ch[i] = (Math.random() * 2 - 1) * .55 + b * 3; }   // grainy, a bit papery
+  };
+  addEventListener('pointerdown', boot); addEventListener('keydown', boot); addEventListener('touchstart', boot, { passive: true });
+  const ready = () => on && ac && ac.state === 'running';
+  function rustle(dir, len, f0, f1, vol, at = 0){
+    const t = ac.currentTime + at, src = ac.createBufferSource(), bp = ac.createBiquadFilter(), g = ac.createGain(), pan = ac.createStereoPanner ? ac.createStereoPanner() : null;
+    src.buffer = noise; src.playbackRate.value = .85 + Math.random() * .3;
+    bp.type = 'bandpass'; bp.Q.value = .5; bp.frequency.setValueAtTime(f0, t); bp.frequency.exponentialRampToValueAtTime(f1, t + len * .6);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(vol, t + len * .18); g.gain.exponentialRampToValueAtTime(.0008, t + len);
+    src.connect(bp); bp.connect(g);
+    if (pan){ pan.pan.setValueAtTime(-.45 * dir, t); pan.pan.linearRampToValueAtTime(.45 * dir, t + len); g.connect(pan); pan.connect(out); } else g.connect(out);
+    src.start(t, Math.random() * .5); src.stop(t + len + .05);
+  }
+  sfx.flip = (dir = 1) => { if (!ready()) return; rustle(dir, .3, 500, 1400, .07); };
+  sfx.page = (dir = 1) => { if (!ready()) return; rustle(dir, .5, 900, 2600, .045); rustle(dir, .7, 400, 1300, .06, .3); rustle(dir, .25, 300, 700, .05, .92); };
 }
 
 /* ---------- rooms ---------- */
@@ -697,15 +875,18 @@ function show(id, instant){
   page = id; document.body.dataset.page = id;
   document.querySelectorAll('.nav a').forEach(a => { if (a.dataset.p === id) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
   if (G && prev && !reduced && !instant){
-    // like slides on one canvas: rooms glide sideways while the living background pans with them
+    // like turning a leaf of a sketchbook: the room swings away on its spine while the living background pans beneath
     if (tl) tl.progress(1).kill();
-    const dir = ORDER.indexOf(id) > ORDER.indexOf(prev.id) ? 1 : -1;
-    swap(id, prev); prev.style.pointerEvents = 'none';
+    const dir = ORDER.indexOf(id) > ORDER.indexOf(prev.id) ? 1 : -1; sfx.page(dir);
+    swap(id, prev); prev.style.pointerEvents = 'none'; prev.classList.add('leaf');
+    G.set(prev, { zIndex: 2, transformOrigin: dir > 0 ? '0% 50%' : '100% 50%', transformPerspective: 2000 });
     tl = G.timeline({ onComplete: () => { tl = null; } })
-      .to(prev, { x: () => -dir * innerWidth * .22, opacity: 0, scale: .97, duration: .75, ease: 'power3.in' }, 0)
-      .fromTo(next, { x: () => dir * innerWidth * .28, opacity: 0, scale: 1.03 }, { x: 0, opacity: 1, scale: 1, duration: 1.25, ease: 'expo.out', clearProps: 'transform,opacity' }, .3)
+      .to(prev, { rotationY: dir > 0 ? -92 : 92, duration: 1.05, ease: 'power2.in' }, 0)
+      .to(prev, { '--shade': .55, duration: 1.05, ease: 'power1.in' }, 0)
+      .to(prev, { opacity: 0, duration: .22, ease: 'none' }, .83)
+      .fromTo(next, { opacity: 0, scale: .985 }, { opacity: 1, scale: 1, duration: 1, ease: 'power2.out', clearProps: 'transform,opacity' }, .3)
       .add(() => enter(id), .35)
-      .add(() => { prev.hidden = true; prev.style.pointerEvents = ''; G.set(prev, { clearProps: 'transform,opacity' }); }, .75);
+      .add(() => { prev.hidden = true; prev.style.pointerEvents = ''; prev.classList.remove('leaf'); G.set(prev, { clearProps: 'transform,opacity,zIndex,transformOrigin,--shade' }); }, 1.05);
     return;
   }
   if (G){ if (tl) tl.progress(1).kill(); swap(id); if (prev && !reduced) enter(id); return; }
@@ -815,9 +996,10 @@ function loop(now){
 }
 
 $('.sig').addEventListener('animationend', e => { e.target.style.webkitMaskImage = e.target.style.maskImage = 'none'; });
+initSigBrush();
 
 (async () => {
-  initContact(); initCursor(); initLB(); initMagnet();
+  initContact(); initCursor(); initSound(); initLB(); initMagnet();
   show(location.hash.slice(1), true);
   await prepare();
   if (window.THREE){ initBg(); initHero(); initRing(); if (ring.on) ring.sync(); }

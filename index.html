@@ -199,7 +199,7 @@ html.brush input,html.brush textarea{cursor:text!important}
 .snd{width:34px;height:34px;margin-left:clamp(10px,2vw,22px);border-radius:50%;border:1px solid var(--line);background:var(--glass);color:var(--paper);display:grid;place-items:center;cursor:pointer;padding:0;flex-shrink:0;transition:background .3s,opacity .3s;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
 .snd svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round}
 .snd .w{transition:opacity .3s}.snd[aria-pressed="false"]{opacity:.55}.snd[aria-pressed="false"] .w{opacity:0}
-@media (max-width:520px){.mark{font-size:1.6rem}.nav{gap:6px 12px;flex-wrap:nowrap}.nav a{font-size:.82rem;white-space:nowrap}}
+@media (max-width:520px){:root{--head:calc(env(safe-area-inset-top,0px) + 96px)}.mark{font-size:1.6rem}.nav{gap:2px 12px;flex-wrap:wrap}.nav a{font-size:.82rem;white-space:nowrap}.nav .ws{flex-basis:100%;text-align:right}}
 
 #bgm{display:none}
 @keyframes drift{from{transform:translate3d(-6%,-4%,0) rotate(-4deg)}to{transform:translate3d(6%,5%,0) rotate(5deg)}}

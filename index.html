@@ -654,13 +654,15 @@ async function openLB(list, i, rect){
   if (!reduced){
     $('#lb-bg').animate([{ opacity: 0 }, { opacity: 1 }], { duration: 500, easing: 'ease-out' });
     lb.querySelectorAll('.ib,.lb-count').forEach(el => el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 400, delay: 450, fill: 'backwards' }));
-    if (rect) flip(rect, lbImg.getBoundingClientRect(), 1).finished.then(() => lbImg.getAnimations().forEach(x => x.cancel()));
+    if (rect){ const a = flip(rect, lbImg.getBoundingClientRect(), 1); a.finished.then(() => a.cancel(), () => {}); }
     else lbImg.animate([{ opacity: 0, transform: 'scale(.96)' }, { opacity: 1, transform: 'none' }], { duration: 600, easing: EASE });
   }
   $('#lb-close').focus({ preventScroll: true }); lbBusy = false;
 }
 async function closeLB(){
   if (lb.hidden || lbBusy) return; lbBusy = true;
+  try {
+  lbImg.getAnimations().forEach(a => a.cancel());
   const w = lbList[lbI];
   if (ring.on) ring.show(WORKS.indexOf(w));
   const rect = hero.on && lbList.length === WORKS.filter(x => x.hero).length ? $('#frame').getBoundingClientRect() : null;
@@ -668,15 +670,16 @@ async function closeLB(){
     const anims = [$('#lb-bg').animate([{ opacity: 1 }, { opacity: 0 }], { duration: 480, easing: 'ease-in', fill: 'forwards' })];
     lb.querySelectorAll('.ib,.lb-count').forEach(el => anims.push(el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 180, fill: 'forwards' })));
     anims.push(rect ? flip(rect, lbImg.getBoundingClientRect(), -1) : lbImg.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'scale(.94)' }], { duration: 420, easing: 'ease-in', fill: 'forwards' }));
-    await Promise.all(anims.map(a => a.finished));
+    await Promise.allSettled(anims.map(a => a.finished));
     [...anims, ...lbImg.getAnimations()].forEach(a => a.cancel());
   }
-  lb.hidden = true; lbReturn?.focus?.({ preventScroll: true }); lbBusy = false;
+  } finally { lb.hidden = true; lbBusy = false; }
+  lbReturn?.focus?.({ preventScroll: true });
 }
 function stepLB(d){
   if (lbList.length < 2) return; lbI = (lbI + d + lbList.length) % lbList.length; const w = lbList[lbI]; sfx.flip(d, WORKS.indexOf(w));
   if (reduced) return fillLB(w);
-  lbImg.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: `translateX(${-d * 40}px) rotate(${-d}deg)` }], { duration: 220, easing: 'ease-in' }).finished.then(() => {
+  lbImg.animate([{ opacity: 1, transform: 'none' }, { opacity: 0, transform: `translateX(${-d * 40}px) rotate(${-d}deg)` }], { duration: 220, easing: 'ease-in' }).finished.catch(() => {}).then(() => {
     fillLB(w); lbImg.animate([{ opacity: 0, transform: `translateX(${d * 40}px) rotate(${d}deg)` }, { opacity: 1, transform: 'none' }], { duration: 460, easing: EASE });
   });
 }

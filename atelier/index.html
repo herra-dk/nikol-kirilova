@@ -18,6 +18,10 @@
   color-scheme:dark;
 }
 html,body{height:100%;margin:0;overflow:hidden}
+html{background:#000}
+/* arriving from the site: everything stays black until the door photo is ready, then fades up, so the page never pops in */
+#arrive{position:fixed;inset:0;z-index:30;background:#000;pointer-events:none;transition:opacity 1.6s cubic-bezier(.4,0,.2,1)}
+#arrive.off{opacity:0}
 body{background:var(--ink);color:var(--paper);font-family:var(--f-body);font-weight:300;-webkit-font-smoothing:antialiased;user-select:none;-webkit-user-select:none}
 canvas#gl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
 body.hover canvas#gl{cursor:pointer}
@@ -49,6 +53,9 @@ a.sig:hover .ar{transform:translateX(-5px);opacity:1}
 canvas#gl{transition:filter 3s cubic-bezier(.3,0,.1,1),transform 3.4s cubic-bezier(.25,.6,.1,1)}
 #black{position:fixed;inset:0;z-index:20;background:#000;opacity:0;pointer-events:none;transition:opacity 1.2s cubic-bezier(.5,0,.3,1)}
 body.out #black{opacity:1;pointer-events:auto}
+html.arrive #doorimg{filter:blur(10px) brightness(.55);transform:scale(1.04)}
+html.arrive.go #doorimg{filter:none;transform:none}
+html.arrive #start{opacity:0;transition:opacity 1.2s ease 1.6s}html.arrive.go #start{opacity:1}
 body.pre canvas#gl{filter:blur(16px) brightness(1.35);transform:scale(1.08)}
 #start{position:fixed;inset:0;z-index:5;display:grid;place-items:end center;padding-bottom:calc(env(safe-area-inset-bottom,0px) + 12vh)}
 #start[hidden]{display:none}
@@ -119,6 +126,7 @@ body.near #walkbar{opacity:1;transform:none;pointer-events:auto}
 @media (prefers-reduced-motion:reduce){#intro,#open,#open img,#doorimg{transition:none}#film::after{animation:none}}
 </style>
 
+<div id="arrive"></div>
 <canvas id="gl"></canvas><div id="black"></div>
 <div id="film"></div>
 <a class="sig" href="../index.html" aria-label="Обратно към сайта"><svg class="ar" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>Nikol Kirilova</a>
@@ -126,7 +134,10 @@ body.near #walkbar{opacity:1;transform:none;pointer-events:auto}
 <div id="walkbar"><div class="dock"><button class="ic l" id="wprev" aria-label="Предишна"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><button class="ghost" id="wback">Назад</button><div class="prog"><span class="num" id="count">01 / 08</span><span class="segs"></span></div><button class="primary" id="wopen">Отвори</button><button class="ic r" id="wnext" aria-label="Следваща"><svg viewBox="0 0 24 24"><path d="M9 5l7 7-7 7"/></svg></button></div></div>
 <div id="hint"><span class="k"><svg viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="6"/><path d="M12 3v6"/><path class="hot" d="M12 3.6v5.4H6.6V9a5.4 5.4 0 0 1 5.4-5.4z"/></svg><span>Цъкни картина и отиваш до нея</span></span><span class="k"><svg viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="6"/><path d="M12 3v6"/><path class="hot" d="M12 3.6v5.4h5.4V9A5.4 5.4 0 0 0 12 3.6z"/></svg><span>Задръж десен бутон и се оглеждаш</span></span></div>
 
-<script>document.body.classList.add('pre')</script><div id="intro"><img id="doorimg" src="door.jpg" alt=""></div>
+<script>document.body.classList.add('pre')</script><script>try{if(sessionStorage.getItem('nk-to-atelier')){sessionStorage.removeItem('nk-to-atelier');document.documentElement.classList.add('arrive');const go=()=>requestAnimationFrame(()=>requestAnimationFrame(()=>document.documentElement.classList.add('go')));setTimeout(go,2500);addEventListener('DOMContentLoaded',()=>{const i=document.getElementById('doorimg');(i.decode?i.decode():Promise.resolve()).then(go,go);});}}catch(e){}</script><div id="intro"><img id="doorimg" src="door.jpg" alt=""></div>
+<script>(()=>{const a=document.getElementById('arrive'),d=document.getElementById('doorimg');let done=false;
+  const off=()=>{if(done)return;done=true;requestAnimationFrame(()=>requestAnimationFrame(()=>a.classList.add('off')));};
+  (d.decode?d.decode():Promise.reject()).then(off,()=>{if(d.complete)off();else{d.onload=d.onerror=off;}});setTimeout(off,3000);})();</script>
 <div id="start"><div class="dock entry"><button class="primary" id="go" disabled><span>Зарежда се…</span><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div></div>
 
 <div id="open" role="dialog" aria-label="Творба">

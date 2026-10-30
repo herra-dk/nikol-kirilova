@@ -237,7 +237,7 @@ html.brush input,html.brush textarea{cursor:text!important}
   .frame{transition:none}
 }
 body::after{content:"";position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .6s ease;z-index:9999}
-body.leaving::after{opacity:1}
+body.leaving::after{opacity:1;transition:opacity 1s cubic-bezier(.5,0,.3,1)}
 html.arrive body::after{opacity:1;transition:none}
 html.arrive.go body::after{opacity:0;transition:opacity 1.4s cubic-bezier(.4,0,.2,1)}
 </style>
@@ -976,9 +976,14 @@ document.addEventListener('click', e => {
 addEventListener('hashchange', () => show(location.hash.slice(1)));
 document.addEventListener('click', e => {
   const a = e.target.closest('a.ws'); if (!a || e.metaKey || e.ctrlKey) return;
-  e.preventDefault(); document.body.classList.add('leaving'); setTimeout(() => { location.href = a.href; }, 650);
+  e.preventDefault(); try { sessionStorage.setItem('nk-to-atelier', '1'); } catch (err) {} (new Image()).src = 'atelier/door.jpg'; document.body.classList.add('leaving'); setTimeout(() => { location.href = a.href; }, 1050);
 });
 addEventListener('pageshow', () => document.body.classList.remove('leaving'));
+// fetch the atelier's door photo as soon as the link is approached, so the room opens on it without a pop
+let wsWarm = false;
+const warmWs = () => { if (wsWarm) return; wsWarm = true; new Image().src = 'atelier/door.jpg'; };
+document.querySelectorAll('a.ws').forEach(a => ['pointerenter', 'touchstart', 'focus'].forEach(t => a.addEventListener(t, warmWs, { passive: true })));
+addEventListener('load', () => setTimeout(warmWs, 4000));
 addEventListener('popstate', () => show(location.hash.slice(1)));
 
 /* ---------- contact ---------- */

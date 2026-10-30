@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mrs+Saint+Delafield&family=Onest:wght@300;400;500&display=swap">
+<script>try{if(sessionStorage.getItem('nk-from-atelier')){sessionStorage.removeItem('nk-from-atelier');document.documentElement.classList.add('arrive');addEventListener('load',()=>requestAnimationFrame(()=>requestAnimationFrame(()=>document.documentElement.classList.add('go'))));}}catch(e){}</script>
 <style>
 /* Layout: four full-screen rooms you click between; a living pigment field behind them drains from colour to black and white as you go deeper */
 :root{
@@ -235,6 +236,10 @@ html.brush input,html.brush textarea{cursor:text!important}
   .enter{animation:none;opacity:1}
   .frame{transition:none}
 }
+body::after{content:"";position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;transition:opacity .6s ease;z-index:9999}
+body.leaving::after{opacity:1}
+html.arrive body::after{opacity:1;transition:none}
+html.arrive.go body::after{opacity:0;transition:opacity 1.4s cubic-bezier(.4,0,.2,1)}
 </style>
 </head>
 <body>
@@ -250,6 +255,7 @@ html.brush input,html.brush textarea{cursor:text!important}
       <a href="#tvorbi" data-p="tvorbi">Творби</a>
       <a href="#za-men" data-p="za-men">За мен</a>
       <a href="#kontakt" data-p="kontakt">Контакт</a>
+      <a href="atelier/index.html" class="ws">My workspace</a>
     </nav>
     <button type="button" class="snd" id="snd" aria-pressed="true" aria-label="Звук"><svg viewBox="0 0 24 24"><path d="M4 9.5h3l4.5-4v13l-4.5-4H4z"/><path class="w" d="M15.5 9a4 4 0 0 1 0 6M18.2 6.5a7.5 7.5 0 0 1 0 11"/></svg></button>
   </div>
@@ -968,6 +974,11 @@ document.addEventListener('click', e => {
   show(id);
 });
 addEventListener('hashchange', () => show(location.hash.slice(1)));
+document.addEventListener('click', e => {
+  const a = e.target.closest('a.ws'); if (!a || e.metaKey || e.ctrlKey) return;
+  e.preventDefault(); document.body.classList.add('leaving'); setTimeout(() => { location.href = a.href; }, 650);
+});
+addEventListener('pageshow', () => document.body.classList.remove('leaving'));
 addEventListener('popstate', () => show(location.hash.slice(1)));
 
 /* ---------- contact ---------- */
